@@ -8,12 +8,7 @@ using UnityEngine;
 using Il2CppScheduleOne.DevUtilities;
 using Il2CppScheduleOne.ItemFramework;
 using Il2CppScheduleOne.Messaging;
-using Il2CppScheduleOne.Money;
-using Il2CppScheduleOne.Packaging;
-using Il2CppScheduleOne.Persistence.Datas;
-using Il2CppScheduleOne.Persistence.Loaders;
 using Il2CppScheduleOne.PlayerScripts;
-using Il2CppScheduleOne.Product.Packaging;
 using Il2CppScheduleOne.UI.Handover;
 using Il2CppScheduleOne.UI.Phone.Messages;
 
@@ -99,8 +94,6 @@ namespace EnhanceDealSystems
     private static bool HandoverChosenPrefix(Customer __instance) {
         if (__instance.CurrentContract?.ProductList?.entries == null ||
             __instance.CurrentContract.ProductList.entries.Count == 0) {
-            MelonLogger.Warning(
-                "HandoverChosenPrefix: No valid contract or product list found.");
             return true;
         }
 
