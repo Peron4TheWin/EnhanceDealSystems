@@ -47,7 +47,7 @@
     </ItemGroup>
 
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-      <Exec Command="tasklist | findstr /I &quot;Schedule.*I.exe&quot; &gt;nul &amp;&amp; taskkill /F /IM &quot;Schedule I.exe&quot;&#xA;:retry&#xA;COPY &quot;C:\Users\Administrator\RiderProjects\ClassLibrary2\RevealCounterChance\bin\Release\net6.0\EnhanceDealSystems.dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Schedule I\Mods&quot; &gt;nul&#xA;if %errorlevel% equ 1 goto retry&#xA;&#xA;start &quot;&quot; &quot;steam://rungameid/3164500&quot;&#xA;EXIT" />
+      <Exec Command="tasklist | findstr /I &quot;Schedule.*I.exe&quot; &gt;nul &amp;&amp; taskkill /F /IM &quot;Schedule I.exe&quot;&#xA;:retry&#xA;COPY &quot;C:\Users\Administrator\RiderProjects\EnhanceDealSystems\EnhanceDealSystems\bin\Debug\net6.0\EnhanceDealSystems.dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Schedule I\Mods&quot; &gt;nul&#xA;if %errorlevel% equ 1 goto retry&#xA;&#xA;start &quot;&quot; &quot;steam://rungameid/3164500&quot;&#xA;EXIT" />
     </Target>
 
 </Project>

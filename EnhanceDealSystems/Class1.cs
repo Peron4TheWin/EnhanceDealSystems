@@ -8,7 +8,12 @@ using UnityEngine;
 using Il2CppScheduleOne.DevUtilities;
 using Il2CppScheduleOne.ItemFramework;
 using Il2CppScheduleOne.Messaging;
+using Il2CppScheduleOne.Money;
+using Il2CppScheduleOne.Packaging;
+using Il2CppScheduleOne.Persistence.Datas;
+using Il2CppScheduleOne.Persistence.Loaders;
 using Il2CppScheduleOne.PlayerScripts;
+using Il2CppScheduleOne.Product.Packaging;
 using Il2CppScheduleOne.UI.Handover;
 using Il2CppScheduleOne.UI.Phone.Messages;
 
@@ -18,14 +23,6 @@ namespace EnhanceDealSystems
 {
     public class EntryPoint : MelonMod
     {
-        public HarmonyLib.Harmony harmony;
-
-        public override void OnInitializeMelon()
-        {
-            harmony = new HarmonyLib.Harmony("com.peron.EnhanceDealSystems");
-            harmony.PatchAll();
-        }
-
 
         public static float EvaluateCounterofferPercentage(ProductDefinition product, int quantity, float price,
             Customer customer)
@@ -107,29 +104,84 @@ namespace EnhanceDealSystems
 
             if (__instance.CurrentContract?.ProductList?.entries != null)
             {
-                foreach (ProductList.Entry productListEntry in __instance.CurrentContract.ProductList.entries)
+                ProductList.Entry productListEntry = __instance.CurrentContract.ProductList.entries[0];
                 {
+                    productid = productListEntry.ProductID;
                     if (productListEntry?.Pointer != null)
                     {
-                        productid = productListEntry.ProductID;
                         //Thanks to stupidrepo for this
                         list.Add(Registry.instance._GetItem(productListEntry.ProductID).GetDefaultInstance());
+                        list[0].Quantity = productListEntry.Quantity;
                     }
                 }
             }
-            else
-            {
+            else {
                 return true;
             }
 
             uint quantity = (uint)__instance.CurrentContract.ProductList.entries[0].Quantity;
+            MelonLogger.Msg(quantity);
             //Thanks maxtorcoder and not.rau for explaining Singleton's to me :D 
             uint playerquantityproduct = PlayerSingleton<PlayerInventory>.Instance.GetAmountOfItem(__instance.CurrentContract.ProductList.entries[0].ProductID);
             if (playerquantityproduct >= quantity)
             {
-                PlayerSingleton<PlayerInventory>.Instance.RemoveAmountOfItem(productid, quantity);
-                __instance.ProcessHandover(HandoverScreen.EHandoverOutcome.Finalize, __instance.CurrentContract, list,
-                    true);
+                quantity = quantity;
+                bool candeal = false;
+                //List<(int, int)> itemSlotsInfoUnnamed = new List<(int, int)>();
+                List<int> itemSlotsInfo = new List<int>();
+                foreach (var itemSlot in Player.Local.Inventory)
+                {
+                    if (quantity==0) break;
+                    if (itemSlot.ItemInstance is null) continue;
+                    if (itemSlot.ItemInstance.ID != __instance.CurrentContract.ProductList.entries[0].ProductID) continue;
+                    itemSlotsInfo.Add(itemSlot.Quantity);
+                    WeedInstance instance =  itemSlot.ItemInstance.Cast<WeedInstance>();
+                    {
+                        if (instance.PackagingID == "brick")
+                        {
+                            while (quantity>=20)
+                            {
+                                MelonLogger.Msg(itemSlot.Quantity-1);
+                                itemSlot.ChangeQuantity(itemSlot.Quantity-1);
+                                quantity -= 20;
+                            }
+
+                        }
+
+                        else if (instance.PackagingID == "jar")
+                        {
+                            while (quantity>=5)
+                            {
+                                MelonLogger.Msg(itemSlot.Quantity-1);
+                                itemSlot.ChangeQuantity(-1);
+                                quantity -= 5;
+                            }
+                        }
+                        else if (instance.PackagingID == "baggie")
+                        {
+                            while (quantity<=4 && quantity!=0)
+                            {
+                                MelonLogger.Msg(itemSlot.Quantity-1);
+                                itemSlot.ChangeQuantity(-1);
+                                quantity -= 1;
+                            }
+                        }
+                    }
+                }
+                if (quantity == 0) __instance.ProcessHandover(HandoverScreen.EHandoverOutcome.Finalize, __instance.CurrentContract, list, true);
+                else
+                {
+                    for (var i = 0; i < Player.Local.Inventory.Count; i++)
+                    {
+                        Player.Local.Inventory[i].SetQuantity(itemSlotsInfo[i]);
+                    }
+                }
+                
+                
+                
+                //PlayerSingleton<PlayerInventory>.Instance.RemoveAmountOfItem(productid, quantity);
+                
+                
             }
 
             return false;
