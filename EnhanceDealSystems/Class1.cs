@@ -93,100 +93,164 @@ namespace EnhanceDealSystems
     }
     
     [HarmonyPatch(typeof(Il2CppScheduleOne.Economy.Customer))]
-    class handovers
-    {
-        [HarmonyPatch("HandoverChosen")]
-        [HarmonyPrefix]
-        private static bool HandoverChosenPrefix(Il2CppScheduleOne.Economy.Customer __instance)
-        {
-            Il2CppSystem.Collections.Generic.List<ItemInstance> list = new Il2CppSystem.Collections.Generic.List<ItemInstance>();
-            string productid = "";
+    class Handovers {
+    [HarmonyPatch(typeof(Customer), "HandoverChosen")]
+    [HarmonyPrefix]
+    private static bool HandoverChosenPrefix(Customer __instance) {
+        if (__instance.CurrentContract?.ProductList?.entries == null ||
+            __instance.CurrentContract.ProductList.entries.Count == 0) {
+            MelonLogger.Warning(
+                "HandoverChosenPrefix: No valid contract or product list found.");
+            return true;
+        }
 
-            if (__instance.CurrentContract?.ProductList?.entries != null)
-            {
-                ProductList.Entry productListEntry = __instance.CurrentContract.ProductList.entries[0];
-                {
-                    productid = productListEntry.ProductID;
-                    if (productListEntry?.Pointer != null)
-                    {
-                        //Thanks to stupidrepo for this
-                        list.Add(Registry.instance._GetItem(productListEntry.ProductID).GetDefaultInstance());
-                        list[0].Quantity = productListEntry.Quantity;
+        ProductList.Entry targetProduct =
+            __instance.CurrentContract.ProductList.entries[0];
+        string targetProductId = targetProduct.ProductID;
+        uint totalQuantityNeeded = (uint)targetProduct.Quantity;
+
+        if (totalQuantityNeeded == 0) {
+            return true;
+        }
+
+        uint playerTotalQuantity =
+            PlayerSingleton<PlayerInventory>.Instance.GetAmountOfItem(
+                targetProductId);
+        if (playerTotalQuantity < totalQuantityNeeded) {
+            return true;
+        }
+
+        List<ItemSlot> brickSlots = new List<ItemSlot>();
+        List<ItemSlot> jarSlots = new List<ItemSlot>();
+        List<ItemSlot> unitSlots = new List<ItemSlot>();
+        foreach (var itemSlot in Player.Local.Inventory) {
+            if (itemSlot?.ItemInstance != null &&
+                itemSlot.ItemInstance.ID == targetProductId &&
+                itemSlot.Quantity > 0) {
+                ItemInstance itemInstance = itemSlot.ItemInstance;
+                string packagingId = null;
+                string itemTypeName = itemInstance.GetIl2CppType().Name;
+                WeedInstance weedInstance =
+                    itemInstance.TryCast<WeedInstance>();
+                if (weedInstance != null) {
+                    packagingId = weedInstance.PackagingID;
+                } else {
+                    MethInstance methInstance =
+                        itemInstance.TryCast<MethInstance>();
+                    if (methInstance != null) {
+                        packagingId = methInstance.PackagingID;
+                    } else {
+                        CocaineInstance cocaineInstance =
+                            itemInstance.TryCast<CocaineInstance>();
+                        if (cocaineInstance != null) {
+                            packagingId = cocaineInstance.PackagingID;
+                        }
                     }
+                }
+
+                switch (packagingId?.ToLower()) {
+                    case "brick":
+                        brickSlots.Add(itemSlot);
+
+                        break;
+                    case "jar":
+                        jarSlots.Add(itemSlot);
+
+                        break;
+                    case "baggie":
+                        unitSlots.Add(itemSlot);
+
+                        break;
+                    default:
+                        unitSlots.Add(itemSlot);
+
+                        break;
                 }
             }
-            else {
-                return true;
+        }
+
+        uint remainingQuantity = totalQuantityNeeded;
+        List<(ItemSlot slot, int quantityToRemove)> plannedChanges =
+            new List<(ItemSlot, int)>();
+
+        foreach (var slot in brickSlots) {
+            if (remainingQuantity == 0)
+                break;
+            uint itemsNeeded = remainingQuantity / 20;
+            if (itemsNeeded == 0)
+                break;
+            uint itemsAvailable = (uint)slot.Quantity;
+            uint itemsToTake = Math.Min(itemsNeeded, itemsAvailable);
+
+            if (itemsToTake > 0) {
+                plannedChanges.Add((slot, (int)itemsToTake));
+                remainingQuantity -= itemsToTake * 20;
+            }
+        }
+
+        if (remainingQuantity > 0) {
+            foreach (var slot in jarSlots) {
+                if (remainingQuantity == 0)
+                    break;
+                uint itemsNeeded = remainingQuantity / 5;
+                if (itemsNeeded == 0)
+                    break;
+                uint itemsAvailable = (uint)slot.Quantity;
+                uint itemsToTake = Math.Min(itemsNeeded, itemsAvailable);
+
+                if (itemsToTake > 0) {
+                    plannedChanges.Add((slot, (int)itemsToTake));
+                    remainingQuantity -= itemsToTake * 5;
+                }
+            }
+        }
+
+        if (remainingQuantity > 0) {
+            foreach (var slot in unitSlots) {
+                if (remainingQuantity == 0)
+                    break;
+                uint itemsNeeded = remainingQuantity;
+                uint itemsAvailable = (uint)slot.Quantity;
+                uint itemsToTake = Math.Min(itemsNeeded, itemsAvailable);
+
+                if (itemsToTake > 0) {
+                    plannedChanges.Add((slot, (int)itemsToTake));
+                    remainingQuantity -= itemsToTake * 1;
+                }
+            }
+        }
+
+        if (remainingQuantity == 0) {
+            foreach (var change in plannedChanges) {
+                change.slot.ChangeQuantity(-change.quantityToRemove);
             }
 
-            uint quantity = (uint)__instance.CurrentContract.ProductList.entries[0].Quantity;
-            MelonLogger.Msg(quantity);
-            //Thanks maxtorcoder and not.rau for explaining Singleton's to me :D 
-            uint playerquantityproduct = PlayerSingleton<PlayerInventory>.Instance.GetAmountOfItem(__instance.CurrentContract.ProductList.entries[0].ProductID);
-            if (playerquantityproduct >= quantity)
-            {
-                quantity = quantity;
-                bool candeal = false;
-                //List<(int, int)> itemSlotsInfoUnnamed = new List<(int, int)>();
-                List<int> itemSlotsInfo = new List<int>();
-                foreach (var itemSlot in Player.Local.Inventory)
-                {
-                    if (quantity==0) break;
-                    if (itemSlot.ItemInstance is null) continue;
-                    if (itemSlot.ItemInstance.ID != __instance.CurrentContract.ProductList.entries[0].ProductID) continue;
-                    itemSlotsInfo.Add(itemSlot.Quantity);
-                    WeedInstance instance =  itemSlot.ItemInstance.Cast<WeedInstance>();
-                    {
-                        if (instance.PackagingID == "brick")
-                        {
-                            while (quantity>=20)
-                            {
-                                MelonLogger.Msg(itemSlot.Quantity-1);
-                                itemSlot.ChangeQuantity(itemSlot.Quantity-1);
-                                quantity -= 20;
-                            }
+            Il2CppSystem.Collections.Generic.List<ItemInstance> list =
+                new Il2CppSystem.Collections.Generic.List<ItemInstance>();
+            ItemDefinition itemDef =
+                Registry.instance._GetItem(targetProductId);
+            if (itemDef != null) {
+                ItemInstance handoverInstance = itemDef.GetDefaultInstance();
+                handoverInstance.Quantity = (int)totalQuantityNeeded;
+                list.Add(handoverInstance);
 
-                        }
+                __instance.ProcessHandover(
+                    HandoverScreen.EHandoverOutcome.Finalize,
+                    __instance.CurrentContract, list, true);
 
-                        else if (instance.PackagingID == "jar")
-                        {
-                            while (quantity>=5)
-                            {
-                                MelonLogger.Msg(itemSlot.Quantity-1);
-                                itemSlot.ChangeQuantity(-1);
-                                quantity -= 5;
-                            }
-                        }
-                        else if (instance.PackagingID == "baggie")
-                        {
-                            while (quantity<=4 && quantity!=0)
-                            {
-                                MelonLogger.Msg(itemSlot.Quantity-1);
-                                itemSlot.ChangeQuantity(-1);
-                                quantity -= 1;
-                            }
-                        }
-                    }
-                }
-                if (quantity == 0) __instance.ProcessHandover(HandoverScreen.EHandoverOutcome.Finalize, __instance.CurrentContract, list, true);
-                else
-                {
-                    for (var i = 0; i < Player.Local.Inventory.Count; i++)
-                    {
-                        Player.Local.Inventory[i].SetQuantity(itemSlotsInfo[i]);
-                    }
-                }
-                
-                
-                
-                //PlayerSingleton<PlayerInventory>.Instance.RemoveAmountOfItem(productid, quantity);
-                
-                
+            } else {
+                MelonLogger.Error(
+                    $"HandoverChosenPrefix: Failed to get ItemDefinition for {targetProductId}. Cannot process handover.");
             }
 
             return false;
+        } else {
+            MelonLogger.Warning(
+                $"HandoverChosenPrefix: Failed to fulfill contract. {remainingQuantity} units still needed after planning. No changes applied to inventory.");
+            return true;
         }
     }
+}
     
     
 
