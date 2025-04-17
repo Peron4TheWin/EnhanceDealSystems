@@ -1,23 +1,18 @@
-﻿using System.Diagnostics.Tracing;
-using MelonLoader;
+﻿using MelonLoader;
 using HarmonyLib;
 using Il2CppScheduleOne;
 using Il2CppScheduleOne.Economy;
 using Il2CppScheduleOne.GameTime;
 using Il2CppScheduleOne.Product;
 using UnityEngine;
-using Il2CppScheduleOne.DevUtilities;
 using Il2CppScheduleOne.Dialogue;
 using Il2CppScheduleOne.ItemFramework;
 using Il2CppScheduleOne.Messaging;
 using Il2CppScheduleOne.NPCs;
-using Il2CppScheduleOne.NPCs.CharacterClasses;
-using Il2CppScheduleOne.Persistence;
 using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.UI.Handover;
 using Il2CppScheduleOne.UI.Phone.Messages;
 using Il2CppSystem.Reflection;
-using Il2CppSystem.Security.Util;
 
 [assembly: MelonInfo(typeof(EnhanceDealSystems.EntryPoint), "EnhanceDealSystems", "1.0.6", "_peron")]
 
@@ -80,18 +75,21 @@ namespace EnhanceDealSystems
             return Mathf.Clamp(probability, 0f, 1f) * 100f;
         }
         
+        
+        
     }
     
     
     public static class Config
     {
+        
         public static bool SuperAutoHandover = true;
         public static bool AutoScheduleDeals = true;
         public static bool AutoCounterOffer = true;
         public static int DealDayTime = 4;
         public static bool AutoHandOver = true;
-        public static string JourneyXpMessage = "You currently have XPHERE and rank RANKHERE, you need XPLEFTHERE for rank NEXTRANKHERE";
-
+        public static bool AutoTrack = true;
+        public static bool MagicHandover = true;
         public static void OnLoad()
         {
             string directoryName = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -115,7 +113,10 @@ namespace EnhanceDealSystems
                     "#Super auto handover will complete the deal when pressing E into a npc waiting for a handover in the correct place, auto hand over will still open the dialog box and you'll need to press one, if you don't want superautohandover set it to false",
                     "AutoHandOver=true",
                     "SuperAutoHandover=true",
-                    "JourneyXpMessage=\"You currently have XPHERE and rank RANKHERE, you need XPLEFTHERE for rank NEXTRANKHERE\""
+                    "#Set it to false to avoid autoamtically tracking deals on the left",
+                    "AutoTrack=true",
+                    "#This option is a really op option, so it cames off by default, with this on you will complet a deal as soon as you get close to the NPC (<4meters)",
+                    "MagicHandover=false"
                 };
                 File.WriteAllLines(path, contents);
                 MelonLogger.Msg("Config file created with default values.");
@@ -148,14 +149,19 @@ namespace EnhanceDealSystems
                         {
                             DealDayTime = int.Parse(text4);
                         }
-                        else if (text3.Equals("JourneyXpMessage",StringComparison.OrdinalIgnoreCase))
-                        {
-                            JourneyXpMessage = text4;
-                        }
                         else if (text3.Equals("SuperAutoHandover", StringComparison.OrdinalIgnoreCase))
                         {
-                            lastupdated = true;
+                            
                             SuperAutoHandover = bool.Parse(text4);
+                        }
+                        else if (text3.Equals("AutoTrack",StringComparison.OrdinalIgnoreCase))
+                        {
+                            AutoTrack = bool.Parse(text4);
+                        }
+                        else if (text3.Equals("MagicHandover", StringComparison.OrdinalIgnoreCase))
+                        {
+                            lastupdated = true;
+                            MagicHandover = bool.Parse(text4);
                         }
                     }
                 }
@@ -175,32 +181,44 @@ namespace EnhanceDealSystems
                         "#Super auto handover will complete the deal when pressing E into a npc waiting for a handover in the correct place, auto hand over will still open the dialog box and you'll need to press one, if you don't want superautohandover set it to false",
                         "AutoHandOver=true",
                         "SuperAutoHandover=true",
-                        "JourneyXpMessage=\"You currently have XPHERE and rank RANKHERE, you need XPLEFTHERE for rank NEXTRANKHERE\""
+                        "#Set it to false to avoid autoamtically tracking deals on the left",
+                        "AutoTrack=true",
+                        "#This option is a really op option, so it cames off by default, with this on you will complet a deal as soon as you get close to the NPC (<4meters)",
+                        "MagicHandover=false"
                     };
                     File.WriteAllLines(path, contents);
                     MelonLogger.Msg("Config file created with default values.");
                 }
             }
 
-            if (false)
-            {
-                MelonLogger.Msg(AutoCounterOffer);
-                MelonLogger.Msg(AutoHandOver);
-                MelonLogger.Msg(DealDayTime);
-                MelonLogger.Msg(JourneyXpMessage);
-            }
-
         }
     }
 
 
-    
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+    /* Too dificult tbh
+    [HarmonyPatch(typeof(Il2CppScheduleOne.Levelling.LevelManager))]
+    class LevelQuest
+    {
+        [HarmonyPatch("AddXP")]
+        [HarmonyPostfix]
+        static void UpdateQuest1(Il2CppScheduleOne.Levelling.LevelManager __instance, int xp)
+        {
+            //THIS IS FOR XP QUEST CODE
+        }
+
+        [HarmonyPatch("AddXPLocal")]
+        [HarmonyPostfix]
+        static void UpdateQuest2(Il2CppScheduleOne.Levelling.LevelManager __instance, int xp)
+        {
+            //THIS IS FOR XP QUEST CODE
+        }
+    }
+    */
     
     [HarmonyPatch(typeof(Il2CppScheduleOne.PlayerScripts.Player))]
     [HarmonyPatch("PlayerLoaded")]
@@ -398,9 +416,10 @@ namespace EnhanceDealSystems
     [HarmonyPatch(typeof(Il2CppScheduleOne.Dialogue.DialogueController))]
     class DialogTest
     {
+        
         [HarmonyPatch("Interacted")]
         [HarmonyPrefix]
-        static bool PostInteracted(DialogueController __instance)
+        static bool PreInteracted(DialogueController __instance)
         {
             try
             {
@@ -464,12 +483,98 @@ namespace EnhanceDealSystems
             
         }
     }
+
+    [HarmonyPatch(typeof(Il2CppScheduleOne.AvatarFramework.Animation.AvatarLookController))]
+    class AvatarLook {
+        [HarmonyPatch("UpdateShit")]
+        [HarmonyPostfix]
+        static void AvatarLookController(Il2CppScheduleOne.AvatarFramework.Animation.AvatarLookController __instance)
+        {
+            try
+            {
+                if (__instance.nearestPlayerDist < 4f)
+                {
+                    if (!Config.MagicHandover) return;
+                    NPC npc = __instance.NPC;
+                    Customer customer = npc.gameObject.GetComponent<Customer>();
+                    float testvalue = customer.CurrentContract.Payment;
+                    if (customer.IsAtDealLocation() && customer.CurrentContract.enabled)
+                    {
+                        HandleDeal.DoDeal(customer);
+                        customer.CurrentContract.enabled = false;
+                        customer.CurrentContract.Finalize();
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                return;
+            }
+        }
+    }
+    
+    /*
+    [HarmonyPatch(typeof(Il2CppScheduleOne.Vision.VisionCone))]
+    class VisionCone
+    {
+        [HarmonyPatch("Update")]
+        [HarmonyPostfix]
+        static void Update(Il2CppScheduleOne.Vision.VisionCone __instance)
+        {
+            if (__instance.IsPlayerVisible(Player.Local))
+            {
+                
+                if (!Config.SuperAutoHandover) return;
+                Customer customer = __instance.npc.gameObject.GetComponent<Customer>();
+                float testvalue = customer.CurrentContract.Payment;
+                if (customer.IsAtDealLocation())
+                {
+                    HandleDeal.DoDeal(customer);
+                }
+                else
+                {
+                    return;
+                }
+            }
+        }
+    }
+    */
+
     
     
     
     
 
+    [HarmonyPatch(typeof(Il2CppScheduleOne.Quests.Quest))]
+    class QuestTest
+    {
+        static HashSet<int> handledQuests = new HashSet<int>();
 
+        
+        [HarmonyPatch("SetIsTracked")]
+        [HarmonyPostfix]
+        static void SetIsTrackedPrefix(Il2CppScheduleOne.Quests.Quest __instance, bool tracked)
+        {
+            //
+            if (!tracked) return;
+            if (Config.AutoTrack) return;
+            if (!__instance.title.Contains("Deal for")) return;
+            int questId = __instance.GetHashCode();
+            if (!handledQuests.Contains(questId))
+            {
+                handledQuests.Add(questId);
+                __instance.SetIsTracked(false);
+                return;
+            }
+            return;
+        }
+    }
+    
+    /*
     [HarmonyPatch(typeof(Il2CppScheduleOne.UI.Phone.Messages.MessagesApp))]
     class MainLoop
     {
@@ -478,57 +583,65 @@ namespace EnhanceDealSystems
         [HarmonyPostfix]
         private static void Postfix(Il2CppScheduleOne.UI.Phone.Messages.MessagesApp __instance)
         {
-            try
+            Response? r1=null;
+            Response? r2=null;
+            
+            MSGConversation? answerto=null;
+            if (__instance.unreadConversations.Count==0) return;
+            var instanceUnreadConversation = __instance.unreadConversations[0];
+            if (instanceUnreadConversation.contactName=="Beth Penn") instanceUnreadConversation.SetRead(true);
+            if (instanceUnreadConversation.currentResponses.Count==0)instanceUnreadConversation.SetRead(true);
+            r1 = instanceUnreadConversation.currentResponses[0];
+            r2 = instanceUnreadConversation.currentResponses[1];
+            
+            if (instanceUnreadConversation.bubbles[instanceUnreadConversation.bubbles.Count - 1].alignment == MessageBubble.Alignment.Left)
             {
-                string word = "";
-                foreach (var instanceUnreadConversation in __instance.unreadConversations)
-                {
-                    if (instanceUnreadConversation.currentResponses.Count == 3)
-                    {
-                        word = "COUNTEROFFER";
-                    } else if (instanceUnreadConversation.currentResponses.Count == 2)
-                    {
-                        if (instanceUnreadConversation.messageHistory[instanceUnreadConversation.messageHistory.Count-1].sender == Message.ESenderType.Player) continue;
-                        word = "ACCEPT_CONTRACT";
-                    }
-                
-                    
-                    foreach (Response currentResponse in instanceUnreadConversation.currentResponses)
-                    {
-                        //left = npc
-                        //right = you
-                        //if (instanceUnreadConversation.bubbles[instanceUnreadConversation.bubbles.Count-1].alignment==1)
-                        if (currentResponse.label.Equals(word) && instanceUnreadConversation.bubbles[instanceUnreadConversation.bubbles.Count-1].alignment==MessageBubble.Alignment.Left)
-                        {
-                            if (word.Equals("COUNTEROFFER"))
-                            {
-                                if (!Config.AutoCounterOffer)
-                                {
-                                    continue;
-                                }
-                            }
-                            else if (word.Equals("ACCEPT_CONTRACT"))
-                            {
-                                if (!Config.AutoScheduleDeals)
-                                {
-                                    continue;
-                                }
-                            }
-                            instanceUnreadConversation.ResponseChosen(currentResponse, true); 
-                        }
-                    }
-                }
+                    answerto=instanceUnreadConversation;
             }
-            catch (Exception e)
+            
+            if (!(answerto is null))
             {
-                //ignore
+                if (r2 != null && r2.label=="COUNTEROFFER")answerto.ResponseChosen(r2, true);
+                if (r1 != null && r1.label=="ACCEPT_CONTRACT")answerto.ResponseChosen(r1, true);
             }
         }
             
     }
-    
+    */
 
-[HarmonyPatch(typeof(Il2CppScheduleOne.UI.Phone.CounterofferInterface))]
+
+    [HarmonyPatch(typeof(Il2CppScheduleOne.Messaging.MSGConversation))]
+    class MsgTest
+    {
+        /*
+        [HarmonyPatch(nameof(Il2CppScheduleOne.Messaging.MSGConversation.MoveToTop))]
+        [HarmonyPrefix]
+        public static void MoveToTop(Il2CppScheduleOne.Messaging.MSGConversation __instance)
+        {
+            MelonLogger.Msg("MoveToTop");
+            MelonLogger.Msg(__instance.currentResponses.Count);
+        }
+        */
+        [HarmonyPatch(nameof(Il2CppScheduleOne.Messaging.MSGConversation.RefreshPreviewText))]
+        [HarmonyPostfix]
+        public static void RefreshPreviewText(Il2CppScheduleOne.Messaging.MSGConversation __instance)
+        {
+            if (__instance.currentResponses.Count >= 2 && __instance.bubbles[__instance.bubbles.Count - 1].alignment == MessageBubble.Alignment.Left)
+            {
+                if (__instance.currentResponses[1].label == "COUNTEROFFER" && Config.AutoCounterOffer)
+                {
+                    __instance.ResponseChosen(__instance.currentResponses[1],true);
+                }
+                else if (__instance.currentResponses[0].label == "ACCEPT_CONTRACT" && Config.AutoScheduleDeals)
+                {
+                    __instance.ResponseChosen(__instance.currentResponses[0],true);
+                }
+            }
+        }
+    }
+    
+    
+    [HarmonyPatch(typeof(Il2CppScheduleOne.UI.Phone.CounterofferInterface))]
     class CounterofferInterfacePatches
     {
         private static void UpdateConfirmButtonText(Il2CppScheduleOne.UI.Phone.CounterofferInterface instance)
@@ -541,6 +654,11 @@ namespace EnhanceDealSystems
                 instance.price,
                 instance.conversation.sender.GetComponent<Customer>()
             );
+            if (chance < 70f)
+            {
+                instance.conversation.ResponseChosen(instance.conversation.currentResponses[0], true);
+                return;
+            }
             while (Mathf.RoundToInt(chance) == 100)
             {
                 instance.price += 1;
@@ -555,6 +673,7 @@ namespace EnhanceDealSystems
             instance.PriceInput.text=instance.price.ToString();
             instance.Update();
             instance.Send();
+            
             instance.IsOpen=false;
             
         }
